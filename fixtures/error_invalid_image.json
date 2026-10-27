@@ -1,0 +1,8 @@
+{
+  "_status": 400,
+  "error": {
+    "code": "INVALID_IMAGE",
+    "message": "invalid_image",
+    "request_id": "72702066b357"
+  }
+}

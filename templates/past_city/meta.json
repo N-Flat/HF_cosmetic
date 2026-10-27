@@ -1,0 +1,20 @@
+{
+  "id": "past_city",
+  "era": "past",
+  "label": "100年前・都市",
+  "slot": {
+    "left_eye": [
+      430,
+      540
+    ],
+    "right_eye": [
+      650,
+      540
+    ],
+    "mouth": [
+      540,
+      760
+    ]
+  },
+  "_note": "仮の素材（tools/make_dummy_templates.py で生成）。デザイン担当の素材が届いたら差し替える"
+}

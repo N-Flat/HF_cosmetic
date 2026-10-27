@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+
+# 生成物
+output/
+
+# 顔写真（公開リポジトリには置かない）
+tests/images/*
+!tests/images/.gitkeep
+fixtures/composite.json
+
+# 練習用
+main.py

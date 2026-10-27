@@ -1,0 +1,23 @@
+{
+  "_status": 200,
+  "templates": [
+    {
+      "id": "future_city",
+      "era": "future",
+      "label": "100年後・都市",
+      "thumbnail": "/v1/templates/future_city/thumb.jpg"
+    },
+    {
+      "id": "past_city",
+      "era": "past",
+      "label": "100年前・都市",
+      "thumbnail": "/v1/templates/past_city/thumb.jpg"
+    },
+    {
+      "id": "present_city",
+      "era": "present",
+      "label": "現在・都市",
+      "thumbnail": "/v1/templates/present_city/thumb.jpg"
+    }
+  ]
+}

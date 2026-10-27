@@ -1,0 +1,8 @@
+{
+  "_status": 422,
+  "error": {
+    "code": "NO_FACE",
+    "message": "face not detected",
+    "request_id": "0929905db1a5"
+  }
+}
