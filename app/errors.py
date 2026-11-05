@@ -20,6 +20,10 @@ MESSAGES = {
     "TEMPLATE_NOT_FOUND": "指定されたテンプレートが見つかりません。",
     "MODEL_NOT_READY": "モデルを読み込めていません。API サーバーのログを確認してください。",
     "INVALID_REQUEST": "リクエストの形式が正しくありません。",
+    "MULTIPLE_FACES": "複数の顔が写っています。1人だけで撮影してください。",
+    "USER_NOT_FOUND": "指定された user_id は登録されていません。",
+    "CONSENT_REQUIRED": "顔認証の登録には本人の同意が必要です。",
+    "ENROLL_INCONSISTENT": "登録写真の中に別の人が含まれているようです。同じ人の写真で撮り直してください。",
     "INTERNAL": "サーバー内部でエラーが発生しました。",
 }
 

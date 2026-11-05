@@ -16,3 +16,8 @@ fixtures/composite.json
 
 # 画面から追加した背景テンプレート
 templates/custom_*/
+
+# 顔認証モデル（tools/download_face_models.py で取得）と登録データ（特徴量）
+models/*.onnx
+models/*.part
+data/
