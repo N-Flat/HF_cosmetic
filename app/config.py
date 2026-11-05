@@ -55,5 +55,19 @@ THUMB_WIDTH = 400
 VERIFY_THRESHOLD = 70.0  # 一致度(%)がこれ以上なら同一人物とみなす（暫定。同じ写真の回転・反転で 70〜96%）
 VERIFY_RMS_ZERO = 0.06  # 形状の差(RMS)がこれ以上で一致度 0%（平均顔との差は約 0.1）
 
+# 顔認証: OpenCV の YuNet（顔検出）+ SFace（顔認識）。モデルは tools/download_face_models.py で取得
+FACE_DETECTOR_PATH = BASE_DIR / "models" / "face_detection_yunet_2023mar.onnx"
+FACE_RECOGNIZER_PATH = BASE_DIR / "models" / "face_recognition_sface_2021dec.onnx"
+FACE_DETECTOR_NAME = "yunet 2023mar"
+FACE_RECOGNIZER_NAME = "sface 2021dec"
+FACE_DB_PATH = BASE_DIR / "data" / "face_db.json"  # 特徴量だけを保存（顔画像は保存しない）
+FACE_DETECT_SIDE = 640  # 長辺をこの px に縮小して検出（YuNet は大きく写った顔を見落とすため）
+FACE_DETECT_SCORE = 0.8  # 検出の信頼度がこれ未満の顔は無視
+FACE_MIN_PX = 80  # 顔の幅（元画像の px）がこれ未満なら LOW_RESOLUTION
+FACE_MATCH_THRESHOLD = 0.363  # コサイン類似度がこれ以上で本人とみなす（OpenCV 推奨値。展示環境で要調整）
+FACE_ENROLL_IMAGES = 3  # 登録に使う枚数
+FACE_IDENTIFY_TOP_K = 3  # identify で返す候補の数
+USER_ID_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
+
 # Next.js から直接叩く確認用
 CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]

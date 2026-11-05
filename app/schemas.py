@@ -83,3 +83,47 @@ class VerifyResponse(BaseModel):
     rms: float  # 形状の差（小さいほど似ている）
     faces: list[VerifyFace]  # [1枚目, 2枚目]
     timings_ms: dict[str, int]
+
+
+# --- 顔認証（YuNet + SFace） ---
+
+class DetectedFace(BaseModel):
+    bbox: tuple[float, float, float, float]  # [x, y, w, h]（画像に対する 0〜1）
+    score: float  # 検出の信頼度
+    warnings: list[str]
+
+
+class FaceEnrollResponse(BaseModel):
+    request_id: str
+    user_id: str
+    images: int  # 登録した枚数
+    replaced: bool  # 同じ user_id の登録を置き換えたか
+    min_pair_score: float  # 登録写真どうしの類似度の最小値（写真がそろっているかの目安）
+    faces: list[DetectedFace]
+    timings_ms: dict[str, int]
+
+
+class FaceCandidate(BaseModel):
+    user_id: str
+    score: float  # コサイン類似度（-1〜1、大きいほど似ている）
+
+
+class FaceIdentifyResponse(BaseModel):
+    request_id: str
+    matched: bool
+    user_id: str | None  # 一致した人（matched=False なら null）
+    score: float  # 1位の類似度（登録0人なら 0）
+    threshold: float
+    candidates: list[FaceCandidate]  # 類似度の高い順
+    face: DetectedFace
+    timings_ms: dict[str, int]
+
+
+class FaceVerifyResponse(BaseModel):
+    request_id: str
+    user_id: str
+    matched: bool
+    score: float
+    threshold: float
+    face: DetectedFace
+    timings_ms: dict[str, int]

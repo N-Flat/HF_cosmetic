@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>顔認証テスト</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --fg:#1d2330; --muted:#6b7280; --line:#e3e6eb; --accent:#2563eb; --ok:#15803d; --ng:#b91c1c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111418; --card:#1a1f26; --fg:#e6e9ee; --muted:#9aa3af; --line:#2b323c; --accent:#60a5fa; --ok:#4ade80; --ng:#f87171; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.6 system-ui, "Hiragino Sans", "Yu Gothic UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.note { color: var(--muted); margin: 0 0 16px; font-size: 13px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+  .card h2 { font-size: 15px; margin: 0 0 10px; }
+  video, canvas { width: 100%; border-radius: 8px; background: #000; display: block; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  input[type=text] { flex: 1; min-width: 0; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; }
+  button { padding: 7px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .shots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+  .shots img, .shots div { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; border: 1px dashed var(--line); }
+  .result { font-size: 22px; font-weight: 700; margin: 6px 0; min-height: 1.4em; }
+  .ok { color: var(--ok); } .ng { color: var(--ng); }
+  pre { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font-size: 12px; overflow: auto; max-height: 320px; margin: 0; white-space: pre-wrap; word-break: break-all; }
+  label.small { font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>顔認証テスト（YuNet + SFace）</h1>
+  <p class="note">カメラ映像はこのページ内で撮影し、API に送るだけです。サーバーには顔画像を保存せず、特徴量（128次元）だけを保存します。</p>
+
+  <div class="grid">
+    <section class="card">
+      <h2>カメラ</h2>
+      <video id="video" autoplay playsinline muted></video>
+      <div class="row">
+        <button id="startCam" class="primary">カメラを起動</button>
+        <label class="small"><input type="file" id="fileInput" accept="image/jpeg,image/png"> 画像ファイルで試す</label>
+      </div>
+      <p class="note" id="camNote">ファイルを選ぶと、次の操作ではカメラの代わりにその画像を使います。</p>
+    </section>
+
+    <section class="card">
+      <h2>1. 登録（/v1/face/enroll）</h2>
+      <div class="row"><input type="text" id="userId" placeholder="user_id（半角英数字・_・-）" value="test_user"></div>
+      <div class="row"><label><input type="checkbox" id="consent"> 本人の同意を得た</label></div>
+      <div class="row">
+        <button id="shot">撮影（<span id="shotCount">0</span>/3）</button>
+        <button id="clearShots">撮り直し</button>
+        <button id="enroll" class="primary" disabled>登録</button>
+      </div>
+      <div class="shots" id="shots"><div></div><div></div><div></div></div>
+    </section>
+
+    <section class="card">
+      <h2>2. 照合</h2>
+      <div class="row">
+        <button id="identify" class="primary">展示ブース: 1対N で探す</button>
+        <button id="verify">スマホ: user_id で 1対1 確認</button>
+        <button id="delete">user_id を削除</button>
+      </div>
+      <div class="result" id="result"></div>
+    </section>
+
+    <section class="card">
+      <h2>レスポンス</h2>
+      <pre id="out">（ここに API の結果が出ます）</pre>
+    </section>
+  </div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const video = $("video");
+let shots = [];
+let fileBlob = null;
+
+$("startCam").onclick = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: "user" } });
+    video.srcObject = stream;
+    fileBlob = null;
+    $("camNote").textContent = "カメラを使用中です。";
+  } catch (e) {
+    $("camNote").textContent = "カメラを起動できませんでした: " + e.message;
+  }
+};
+
+$("fileInput").onchange = (e) => {
+  fileBlob = e.target.files[0] || null;
+  if (fileBlob) $("camNote").textContent = "画像ファイルを使用中: " + fileBlob.name;
+};
+
+// 鏡像にせずそのまま撮る（API 側も反転しない前提）
+function capture() {
+  if (fileBlob) return Promise.resolve(fileBlob);
+  if (!video.videoWidth) return Promise.reject(new Error("先にカメラを起動するか、画像ファイルを選んでください。"));
+  const c = document.createElement("canvas");
+  c.width = video.videoWidth; c.height = video.videoHeight;
+  c.getContext("2d").drawImage(video, 0, 0);
+  return new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.92));
+}
+
+function renderShots() {
+  const box = $("shots");
+  box.innerHTML = "";
+  for (let i = 0; i < 3; i++) {
+    if (shots[i]) { const img = document.createElement("img"); img.src = URL.createObjectURL(shots[i]); box.appendChild(img); }
+    else box.appendChild(document.createElement("div"));
+  }
+  $("shotCount").textContent = shots.length;
+  $("enroll").disabled = shots.length !== 3;
+  $("shot").disabled = shots.length >= 3;
+}
+
+function show(res, data, text, ok) {
+  $("out").textContent = `HTTP ${res.status}\n` + (data ? JSON.stringify(data, null, 2) : "(本文なし)");
+  $("result").textContent = text;
+  $("result").className = "result " + (ok ? "ok" : "ng");
+}
+
+async function call(method, url, form) {
+  const res = await fetch(url, { method, body: form });
+  const data = res.status === 204 ? null : await res.json();
+  return [res, data];
+}
+
+const errText = (d) => d && d.error ? `${d.error.code}: ${d.error.message}` : "エラー";
+// score はコサイン類似度（しきい値は API の threshold）
+const pct = (s) => "score " + s.toFixed(3);
+
+async function guard(fn) {
+  try { await fn(); } catch (e) { $("result").textContent = e.message; $("result").className = "result ng"; }
+}
+
+$("shot").onclick = () => guard(async () => { shots.push(await capture()); renderShots(); });
+$("clearShots").onclick = () => { shots = []; renderShots(); };
+
+$("enroll").onclick = () => guard(async () => {
+  const f = new FormData();
+  f.append("user_id", $("userId").value);
+  f.append("consent", $("consent").checked ? "true" : "false");
+  shots.forEach((b, i) => f.append("images", b, `shot${i + 1}.jpg`));
+  const [res, d] = await call("POST", "/v1/face/enroll", f);
+  if (res.ok) show(res, d, `登録しました: ${d.user_id}${d.replaced ? "（置き換え）" : ""}`, true);
+  else show(res, d, errText(d), false);
+});
+
+$("identify").onclick = () => guard(async () => {
+  const f = new FormData();
+  f.append("image", await capture(), "probe.jpg");
+  const [res, d] = await call("POST", "/v1/face/identify", f);
+  if (!res.ok) return show(res, d, errText(d), false);
+  show(res, d, d.matched ? `${d.user_id} さん（${pct(d.score)}）` : `該当なし（最高 ${pct(d.score)}）`, d.matched);
+});
+
+$("verify").onclick = () => guard(async () => {
+  const f = new FormData();
+  f.append("user_id", $("userId").value);
+  f.append("image", await capture(), "probe.jpg");
+  const [res, d] = await call("POST", "/v1/face/verify", f);
+  if (!res.ok) return show(res, d, errText(d), false);
+  show(res, d, d.matched ? `本人です（${pct(d.score)}）` : `本人ではありません（${pct(d.score)}）`, d.matched);
+});
+
+$("delete").onclick = () => guard(async () => {
+  const id = encodeURIComponent($("userId").value);
+  const [res, d] = await call("DELETE", `/v1/face/${id}`);
+  show(res, d, res.ok ? "削除しました" : errText(d), res.ok);
+});
+
+renderShots();
+</script>
+</body>
+</html>

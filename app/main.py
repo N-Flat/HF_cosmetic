@@ -5,12 +5,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import CORS_ORIGINS, MODEL_PATH, OBJ_PATH, TEMPLATE_DIR
+from app.config import (CORS_ORIGINS, FACE_DB_PATH, FACE_DETECTOR_PATH, FACE_RECOGNIZER_PATH, MODEL_PATH,
+                        OBJ_PATH, TEMPLATE_DIR)
 from app.core.composite import load_templates
+from app.core.face_auth import FaceAuth
+from app.core.face_store import FaceStore
 from app.core.geometry import load_canonical_mesh
 from app.core.landmarker import Landmarker
 from app.errors import register_error_handlers
-from app.routers import analyze, composite, health, templates, verify
+from app.routers import analyze, composite, demo, face, health, templates, verify
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("cosme-ai")
@@ -29,6 +32,14 @@ async def lifespan(app: FastAPI):
     except Exception:
         log.exception("failed to load mesh: %s", OBJ_PATH)
         app.state.mesh = None
+    try:
+        app.state.face_auth = FaceAuth(FACE_DETECTOR_PATH, FACE_RECOGNIZER_PATH)
+    except Exception:
+        log.exception("failed to load face models (run tools/download_face_models.py): %s, %s",
+                      FACE_DETECTOR_PATH, FACE_RECOGNIZER_PATH)
+        app.state.face_auth = None
+    app.state.face_store = FaceStore(FACE_DB_PATH)
+    log.info("face users: %d", len(app.state.face_store))
     app.state.templates = load_templates(TEMPLATE_DIR)
     log.info("templates: %s", list(app.state.templates))
     yield
@@ -45,3 +56,5 @@ app.include_router(templates.router)
 app.include_router(analyze.router)
 app.include_router(composite.router)
 app.include_router(verify.router)
+app.include_router(face.router)
+app.include_router(demo.router)
