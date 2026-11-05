@@ -11,11 +11,24 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 log = logging.getLogger("cosme-ai")
 
 
+# フロントは message をそのまま利用者に見せるので日本語にする（スタックトレース等は入れない）
+MESSAGES = {
+    "NO_FACE": "顔を検出できませんでした。正面の写真でお試しください。",
+    "LOW_RESOLUTION": "顔が小さすぎます。もう少し近づくか、高解像度の写真でお試しください。",
+    "INVALID_IMAGE": "画像を読み込めませんでした。JPEG・PNG・WebP の写真を送ってください。",
+    "IMAGE_TOO_LARGE": "画像が大きすぎます（10MB まで）。",
+    "TEMPLATE_NOT_FOUND": "指定されたテンプレートが見つかりません。",
+    "MODEL_NOT_READY": "モデルを読み込めていません。API サーバーのログを確認してください。",
+    "INVALID_REQUEST": "リクエストの形式が正しくありません。",
+    "INTERNAL": "サーバー内部でエラーが発生しました。",
+}
+
+
 class ApiError(Exception):
     def __init__(self, code: str, status: int, msg: str = ""):
         super().__init__(code)
         self.code, self.status = code, status
-        self.msg = msg or code.lower()
+        self.msg = msg or MESSAGES.get(code, code.lower())
 
 
 def body(code: str, msg: str, rid: str) -> dict:
@@ -46,7 +59,7 @@ def register_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(RequestValidationError)
     def _val(req: Request, e: RequestValidationError):
-        return JSONResponse(body("INVALID_REQUEST", str(e), rid(req)), 400)
+        return JSONResponse(body("INVALID_REQUEST", f"{MESSAGES['INVALID_REQUEST']} {e}", rid(req)), 400)
 
     # 存在しないパスなど、FastAPI 標準の 404/405 もエラー形式に揃える
     @app.exception_handler(StarletteHTTPException)
@@ -56,4 +69,4 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(Exception)
     def _any(req: Request, e: Exception):
         log.exception("unhandled")
-        return JSONResponse(body("INTERNAL", "internal error", rid(req)), 500)
+        return JSONResponse(body("INTERNAL", MESSAGES["INTERNAL"], rid(req)), 500)

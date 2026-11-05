@@ -145,3 +145,45 @@ def test_error_too_large(client):
 
 def test_error_template_not_found(client):
     assert_error(post_image(client, jpeg_bytes(), "/v1/composite", template_id="nope"), 404, "TEMPLATE_NOT_FOUND")
+
+
+# --- 画面から追加する背景テンプレート ---
+
+def test_template_add_and_delete(client):
+    box = {"label": "テスト背景", "era": "future", "face_x": 0.4, "face_y": 0.2, "face_w": 0.2, "face_h": 0.4}
+    res = post_image(client, jpeg_bytes(), "/v1/templates", **box)
+    assert res.status_code == 200, res.json()
+    t = res.json()
+    assert t["custom"] is True and t["id"].startswith("custom_")
+    try:
+        assert t["id"] in [x["id"] for x in client.get("/v1/templates").json()["templates"]]
+        assert client.get(t["thumbnail"]).headers["content-type"] == "image/jpeg"
+    finally:
+        assert client.delete(f"/v1/templates/{t['id']}").status_code == 204
+    assert t["id"] not in [x["id"] for x in client.get("/v1/templates").json()["templates"]]
+
+
+def test_template_add_without_face(client):
+    """範囲を指定せず、背景に顔もなければ NO_FACE"""
+    assert_error(post_image(client, jpeg_bytes(), "/v1/templates", label="x"), 422, "NO_FACE")
+
+
+def test_template_builtin_not_deletable(client):
+    assert_error(client.delete("/v1/templates/past_city"), 400, "INVALID_REQUEST")
+
+
+# --- 同一人物判定（簡易版） ---
+
+def test_verify_no_face(client):
+    res = client.post("/v1/verify", files={"image_a": ("a.jpg", jpeg_bytes(), "image/jpeg"),
+                                           "image_b": ("b.jpg", jpeg_bytes(), "image/jpeg")})
+    assert_error(res, 422, "NO_FACE")
+    assert res.json()["error"]["message"].startswith("1枚目")
+
+
+def test_verify_same_image(client, face_bytes):
+    res = client.post("/v1/verify", files={"image_a": ("a.jpg", face_bytes, "image/jpeg"),
+                                           "image_b": ("b.jpg", face_bytes, "image/jpeg")})
+    assert res.status_code == 200, res.json()
+    data = res.json()
+    assert data["similarity"] == 100.0 and data["same_person"] is True

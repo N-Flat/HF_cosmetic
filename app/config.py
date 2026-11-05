@@ -42,6 +42,18 @@ SKIN_STD_RATIO = (0.5, 2.0)  # 色合わせ: 標準偏差を変える倍率の�
 MASK_ERODE_PX = 10  # マスクの収縮
 MASK_BLUR_PX = 21  # マスクのぼかし（奇数）
 JPEG_QUALITY = 90
+# 顔の大きさ合わせ: 利用者の FACE_OVAL をテンプレートの顔の楕円に合わせる
+FACE_AXES_PER_EYE = (1.11, 1.41)  # 両目の間隔に対する楕円の半径（横, 縦）。meta に face が無いときに使う
+FACE_COVER_MARGIN = 1.06  # 楕円より少し大きくして、収縮・ぼかしで元の顔がはみ出さないようにする
+FACE_MAX_STRETCH = 0.1  # 縦横の倍率差の上限（顔の形を崩しすぎない）
+
+# 画面から追加する背景テンプレート
+CUSTOM_PREFIX = "custom_"
+THUMB_WIDTH = 400
+
+# 同一人物判定（簡易版）: ランドマーク形状の比較。顔認識モデルではない
+VERIFY_THRESHOLD = 70.0  # 一致度(%)がこれ以上なら同一人物とみなす（暫定。同じ写真の回転・反転で 70〜96%）
+VERIFY_RMS_ZERO = 0.06  # 形状の差(RMS)がこれ以上で一致度 0%（平均顔との差は約 0.1）
 
 # Next.js から直接叩く確認用
-CORS_ORIGINS = ["http://localhost:3000"]
+CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]

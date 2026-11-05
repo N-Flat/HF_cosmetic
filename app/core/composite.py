@@ -26,6 +26,8 @@ class TemplateAsset:
     slot: np.ndarray  # (3, 2) 左目・右目・口の位置（background 上の px）
     skin_mean: np.ndarray  # テンプレートの元の顔の肌の Lab 平均
     skin_std: np.ndarray  # 同じく標準偏差
+    face: np.ndarray  # (4,) 顔の楕円 [cx, cy, ax, ay]（利用者の顔をこの大きさに合わせる）
+    color_match: bool = True  # 背景に人物がいない（顔の範囲を手で指定した）ときは肌の色合わせをしない
 
 
 def _read_rgb(path: Path, flags=cv2.IMREAD_COLOR) -> np.ndarray:
@@ -53,6 +55,23 @@ def _lab_stats(rgb: np.ndarray, mask: np.ndarray) -> tuple[np.ndarray, np.ndarra
     return pixels.mean(axis=0), pixels.std(axis=0) + 1e-6
 
 
+def face_from_slot(slot: np.ndarray) -> np.ndarray:
+    """meta に face が無いときの顔の楕円。両目と口の位置から推定する"""
+    d = float(np.linalg.norm(slot[1] - slot[0]))
+    cx = float(slot[:2, 0].mean())
+    cy = float(slot[:2, 1].mean() + (slot[2, 1] - slot[:2, 1].mean()) * 0.5)
+    ax, ay = cfg.FACE_AXES_PER_EYE
+    return np.array([cx, cy, d * ax, d * ay], np.float32)
+
+
+def slot_from_face(face) -> dict:
+    """face_from_slot の逆。楕円だけ指定されたテンプレートの slot を作る"""
+    cx, cy, ax, _ay = face
+    d = ax / cfg.FACE_AXES_PER_EYE[0]
+    return {"left_eye": [cx - d / 2, cy - d / 2], "right_eye": [cx + d / 2, cy - d / 2],
+            "mouth": [cx, cy + d / 2]}
+
+
 def load_template(folder: Path) -> TemplateAsset:
     meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
     background = _read_rgb(folder / "background.jpg")
@@ -65,14 +84,18 @@ def load_template(folder: Path) -> TemplateAsset:
 
     s = meta["slot"]
     slot = np.array([s["left_eye"], s["right_eye"], s["mouth"]], dtype=np.float32)
+    f = meta.get("face")
+    face = (np.array([*f["center"], *f["axes"]], np.float32) if f else face_from_slot(slot))
     skin_mean, skin_std = _lab_stats(background, _skin_region(background.shape[:2], slot))
     info = Template(
         id=meta["id"],
         era=meta["era"],
         label=meta["label"],
         thumbnail=f"/v1/templates/{meta['id']}/thumb.jpg",
+        custom=meta["id"].startswith(cfg.CUSTOM_PREFIX),
     )
-    return TemplateAsset(info, background, overlay, slot, skin_mean, skin_std)
+    return TemplateAsset(info, background, overlay, slot, skin_mean, skin_std, face,
+                         meta.get("color_match", True))
 
 
 def load_templates(template_dir: Path) -> dict[str, TemplateAsset]:
@@ -103,6 +126,25 @@ def _match_color(face: np.ndarray, mask: np.ndarray, t: TemplateAsset) -> np.nda
     return cv2.cvtColor(np.clip(lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2RGB)
 
 
+def _fit_to_face(m: np.ndarray, oval: np.ndarray, face: np.ndarray) -> np.ndarray:
+    """目と口で合わせた変換 m に、FACE_OVAL がテンプレートの顔の楕円を覆う拡大・移動を足す
+
+    目と口だけで合わせると、目の間隔で大きさが決まるので顔が楕円より小さくなることがある
+    """
+    o = oval @ m[:, :2].T + m[:, 2]
+    lo, hi = o.min(axis=0), o.max(axis=0)
+    center, size = (lo + hi) / 2, np.maximum(hi - lo, 1.0)
+    cx, cy, ax, ay = face
+    scale = np.array([2 * ax, 2 * ay]) / size
+    mean = float(np.sqrt(scale[0] * scale[1]))
+    scale = np.clip(scale, mean * (1 - cfg.FACE_MAX_STRETCH), mean * (1 + cfg.FACE_MAX_STRETCH))
+    scale *= cfg.FACE_COVER_MARGIN
+    # p' = S (p - center) + (cx, cy) を m の後に掛ける
+    fit = np.array([[scale[0], 0, cx - scale[0] * center[0]],
+                    [0, scale[1], cy - scale[1] * center[1]]], np.float32)
+    return (np.vstack([fit, [0, 0, 1]]) @ np.vstack([m, [0, 0, 1]]))[:2].astype(np.float32)
+
+
 def composite(rgb: np.ndarray, landmarks: np.ndarray, t: TemplateAsset) -> np.ndarray:
     """利用者の顔をテンプレートに合成した RGB 画像を返す
 
@@ -118,6 +160,7 @@ def composite(rgb: np.ndarray, landmarks: np.ndarray, t: TemplateAsset) -> np.nd
     m, _ = cv2.estimateAffinePartial2D(src, t.slot)
     if m is None:
         raise ValueError("failed to estimate face alignment")
+    m = _fit_to_face(m, pts[FACE_OVAL], t.face)
     face = cv2.warpAffine(rgb, m, (bw, bh), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
 
     # マスク: FACE_OVAL を同じ変換で移し、収縮＋ぼかしで境界をなじませる
@@ -129,7 +172,8 @@ def composite(rgb: np.ndarray, landmarks: np.ndarray, t: TemplateAsset) -> np.nd
     alpha = cv2.GaussianBlur(mask, (cfg.MASK_BLUR_PX, cfg.MASK_BLUR_PX), 0).astype(np.float32) / 255
 
     # 色合わせ → マスクでアルファ合成
-    face = _match_color(face, alpha, t)
+    if t.color_match:
+        face = _match_color(face, alpha, t)
     a = alpha[..., None]
     out = t.background.astype(np.float32) * (1 - a) + face.astype(np.float32) * a
 
@@ -147,3 +191,28 @@ def to_data_url(rgb: np.ndarray) -> str:
     if not ok:
         raise ValueError("failed to encode JPEG")
     return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode("ascii")
+
+
+def _save_jpg(path: Path, rgb: np.ndarray) -> None:
+    ok, buf = cv2.imencode(".jpg", cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 92])
+    if not ok:
+        raise ValueError("failed to encode JPEG")
+    buf.tofile(str(path))  # 日本語パス対策（_read_rgb と同じ理由）
+
+
+def save_custom_template(template_dir: Path, tid: str, era: str, label: str,
+                         background: np.ndarray, slot: dict, face: np.ndarray,
+                         color_match: bool) -> TemplateAsset:
+    """画面から追加された背景を templates/<tid>/ に保存して読み込む"""
+    folder = template_dir / tid
+    folder.mkdir(parents=True)
+    _save_jpg(folder / "background.jpg", background)
+    h, w = background.shape[:2]
+    th = round(h * cfg.THUMB_WIDTH / w)
+    _save_jpg(folder / "thumb.jpg", cv2.resize(background, (cfg.THUMB_WIDTH, th), interpolation=cv2.INTER_AREA))
+    cx, cy, ax, ay = (round(float(v), 1) for v in face)
+    meta = {"id": tid, "era": era, "label": label,
+            "slot": {k: [round(float(v), 1) for v in p] for k, p in slot.items()},
+            "face": {"center": [cx, cy], "axes": [ax, ay]}, "color_match": color_match}
+    (folder / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return load_template(folder)

@@ -37,7 +37,7 @@ def build_face(result, rgb: np.ndarray) -> tuple[Face, list[str]]:
 
     # 1. 0人
     if not result.face_landmarks:
-        raise ApiError("NO_FACE", 422, "face not detected")
+        raise ApiError("NO_FACE", 422)
 
     # 2. 1人選ぶ（後ろの見物人を拾わないため、bbox 面積が最大の顔）
     boxes = [_bbox(lms) for lms in result.face_landmarks]

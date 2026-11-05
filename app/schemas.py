@@ -29,6 +29,7 @@ class Template(BaseModel):
     era: Literal["past", "present", "future"]
     label: str
     thumbnail: str
+    custom: bool = False  # 画面から追加したもの（削除できる）
 
 
 class TemplatesResponse(BaseModel):
@@ -66,3 +67,19 @@ class CompositeResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     models: dict[str, str]
+
+
+class VerifyFace(BaseModel):
+    bbox: tuple[float, float, float, float]
+    warnings: list[str]
+
+
+class VerifyResponse(BaseModel):
+    request_id: str
+    similarity: float  # 一致度 0〜100(%)
+    threshold: float  # これ以上で同一人物とみなす
+    same_person: bool
+    method: str
+    rms: float  # 形状の差（小さいほど似ている）
+    faces: list[VerifyFace]  # [1枚目, 2枚目]
+    timings_ms: dict[str, int]

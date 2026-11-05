@@ -12,4 +12,7 @@ tests/images/*
 fixtures/composite.json
 
 # 練習用
-main.py
+/main.py
+
+# 画面から追加した背景テンプレート
+templates/custom_*/
