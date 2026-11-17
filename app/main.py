@@ -13,7 +13,7 @@ from app.core.face_store import FaceStore
 from app.core.geometry import load_canonical_mesh
 from app.core.landmarker import Landmarker
 from app.errors import register_error_handlers
-from app.routers import analyze, composite, demo, face, health, templates, verify
+from app.routers import analyze, beautify, composite, demo, face, health, templates, verify
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("cosme-ai")
@@ -57,4 +57,5 @@ app.include_router(analyze.router)
 app.include_router(composite.router)
 app.include_router(verify.router)
 app.include_router(face.router)
+app.include_router(beautify.router)
 app.include_router(demo.router)

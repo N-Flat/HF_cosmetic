@@ -69,5 +69,8 @@ FACE_ENROLL_IMAGES = 3  # 登録に使う枚数
 FACE_IDENTIFY_TOP_K = 3  # identify で返す候補の数
 USER_ID_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
 
+# 美肌加工 v0（app/core/beautify.py）。顔を変形せず、色・明るさだけを軽く変える
+BEAUTIFY_DEFAULT_STRENGTH = 0.6  # 加工の強さ（0〜1）の省略時の値
+
 # Next.js から直接叩く確認用
 CORS_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
