@@ -127,3 +127,32 @@ class FaceVerifyResponse(BaseModel):
     threshold: float
     face: DetectedFace
     timings_ms: dict[str, int]
+
+
+# --- 美肌加工（顔の形は変えない軽い加工） ---
+
+class BeautifyStyle(BaseModel):
+    id: str
+    label: str
+    description: str
+
+
+class BeautifyStylesResponse(BaseModel):
+    styles: list[BeautifyStyle]
+    default_strength: float
+
+
+class BeautifyResult(BaseModel):
+    style: str
+    image: str  # data URL（JPEG。元画像と同じ大きさ）
+
+
+class BeautifyResponse(BaseModel):
+    request_id: str
+    strength: float
+    width: int
+    height: int
+    results: list[BeautifyResult]  # 指定した styles の順
+    protected_features: int  # 加工せずに残したほくろ・そばかすの数
+    warnings: list[str]
+    timings_ms: dict[str, int]

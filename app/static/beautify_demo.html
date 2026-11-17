@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>美肌加工テスト</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --fg:#1d2330; --muted:#6b7280; --line:#e3e6eb; --accent:#2563eb; --ng:#b91c1c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111418; --card:#1a1f26; --fg:#e6e9ee; --muted:#9aa3af; --line:#2b323c; --accent:#60a5fa; --ng:#f87171; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.6 system-ui, "Hiragino Sans", "Yu Gothic UI", sans-serif; }
+  main { max-width: 1200px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.note { color: var(--muted); margin: 0 0 12px; font-size: 13px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+  .top { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 760px) { .top { grid-template-columns: minmax(0, 1fr); } }
+  video { width: 100%; border-radius: 8px; background: #000; display: block; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+  button { padding: 7px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  input[type=range] { flex: 1; min-width: 120px; }
+  .styles label { display: inline-flex; gap: 4px; align-items: center; margin-right: 12px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  figure { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  figure img { width: 100%; display: block; cursor: pointer; user-select: none; -webkit-user-drag: none; touch-action: none; }
+  figcaption { padding: 8px 10px; font-size: 13px; }
+  figcaption b { font-size: 14px; }
+  figcaption span { color: var(--muted); display: block; }
+  .status { font-size: 13px; color: var(--muted); }
+  .status.ng { color: var(--ng); }
+</style>
+</head>
+<body>
+<main>
+  <h1>美肌加工テスト</h1>
+  <p class="note">顔の輪郭・パーツの位置・ほくろはそのままに、色と明るさだけを軽く整えます。結果の画像を押している間は元の写真に戻ります。</p>
+
+  <div class="top">
+    <section class="card">
+      <video id="video" autoplay playsinline muted></video>
+      <div class="row">
+        <button id="startCam">カメラを起動</button>
+        <input type="file" id="fileInput" accept="image/jpeg,image/png">
+      </div>
+    </section>
+    <section class="card">
+      <div class="row styles" id="styles"></div>
+      <div class="row">
+        <span>強さ</span>
+        <input type="range" id="strength" min="0" max="1" step="0.05">
+        <span id="strengthVal"></span>
+      </div>
+      <div class="row">
+        <button id="run" class="primary">撮影して加工</button>
+        <button id="rerun" disabled>同じ写真で再加工</button>
+      </div>
+      <div class="status" id="status">カメラを起動するか、画像ファイルを選んでください。</div>
+    </section>
+  </div>
+
+  <div class="grid" id="results"></div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const video = $("video");
+let styleInfo = [];
+let source = null;  // 最後に送った写真（Blob）
+let fileBlob = null;
+
+async function init() {
+  const res = await fetch("/v1/beautify/styles");
+  const data = await res.json();
+  styleInfo = data.styles;
+  $("strength").value = data.default_strength;
+  $("strengthVal").textContent = data.default_strength;
+  $("styles").innerHTML = styleInfo.map((s) =>
+    `<label title="${s.description}"><input type="checkbox" value="${s.id}" checked> ${s.label}</label>`).join("");
+}
+
+$("strength").oninput = (e) => { $("strengthVal").textContent = e.target.value; };
+
+$("startCam").onclick = async () => {
+  try {
+    video.srcObject = await navigator.mediaDevices.getUserMedia({ video: { width: 1280, height: 720, facingMode: "user" } });
+    fileBlob = null;
+    $("run").textContent = "撮影して加工";
+    setStatus("カメラを使用中です。");
+  } catch (e) { setStatus("カメラを起動できませんでした: " + e.message, true); }
+};
+
+$("fileInput").onchange = (e) => {
+  fileBlob = e.target.files[0] || null;
+  if (fileBlob) { $("run").textContent = "この画像を加工"; setStatus("画像ファイル: " + fileBlob.name); }
+};
+
+function capture() {
+  if (fileBlob) return Promise.resolve(fileBlob);
+  if (!video.videoWidth) return Promise.reject(new Error("先にカメラを起動するか、画像ファイルを選んでください。"));
+  const c = document.createElement("canvas");
+  c.width = video.videoWidth; c.height = video.videoHeight;
+  c.getContext("2d").drawImage(video, 0, 0);  // 鏡像にしない
+  return new Promise((ok) => c.toBlob(ok, "image/jpeg", 0.95));
+}
+
+function setStatus(text, ng) { $("status").textContent = text; $("status").className = "status" + (ng ? " ng" : ""); }
+
+function figure(src, title, desc, original) {
+  const f = document.createElement("figure");
+  const img = document.createElement("img");
+  img.src = src;
+  if (original) {  // 押している間だけ元の写真
+    const show = () => { img.src = original; }, hide = () => { img.src = src; };
+    img.addEventListener("pointerdown", show);
+    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => img.addEventListener(ev, hide));
+  }
+  const cap = document.createElement("figcaption");
+  cap.innerHTML = `<b>${title}</b><span>${desc}</span>`;
+  f.append(img, cap);
+  return f;
+}
+
+async function run(blob) {
+  const styles = [...document.querySelectorAll("#styles input:checked")].map((i) => i.value);
+  if (!styles.length) return setStatus("方式を1つ以上選んでください。", true);
+  const f = new FormData();
+  f.append("image", blob, "photo.jpg");
+  f.append("styles", styles.join(","));
+  f.append("strength", $("strength").value);
+  setStatus("加工中…");
+  $("run").disabled = $("rerun").disabled = true;
+  try {
+    const res = await fetch("/v1/beautify", { method: "POST", body: f });
+    const d = await res.json();
+    if (!res.ok) return setStatus(`${d.error.code}: ${d.error.message}`, true);
+    const original = URL.createObjectURL(blob);
+    const box = $("results");
+    box.innerHTML = "";
+    box.append(figure(original, "元の写真", "加工なし"));
+    for (const r of d.results) {
+      const s = styleInfo.find((x) => x.id === r.style);
+      box.append(figure(r.image, s.label, s.description, original));
+    }
+    const warn = d.warnings.length ? `　warnings: ${d.warnings.join(", ")}` : "";
+    setStatus(`完了（${d.timings_ms.total}ms、強さ ${d.strength}、残したほくろ等 ${d.protected_features} 個）${warn}`);
+  } finally {
+    $("run").disabled = false;
+    $("rerun").disabled = !source;
+  }
+}
+
+$("run").onclick = async () => {
+  try { source = await capture(); await run(source); } catch (e) { setStatus(e.message, true); }
+};
+$("rerun").onclick = () => source && run(source);
+
+init();
+</script>
+</body>
+</html>
